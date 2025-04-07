@@ -1,0 +1,5 @@
+langchain==0.3.23
+langchain_community==0.3.21
+pandas==2.2.3
+PyPDF2==3.0.1
+streamlit==1.44.1
