@@ -1,4 +1,7 @@
+#main.py
+
 import os
+import urllib.parse
 import streamlit as st
 from config import PERSIST_DIRECTORY
 from document_loaders import (
@@ -11,6 +14,11 @@ from vector_store import get_vector_store, delete_file_vectors, get_document_cou
 from vector_store import get_document_and_chunk_count
 # Import Hybrid chain
 from hybrid_chain import HybridQAChain
+import streamlit as st
+from langchain_community.utilities.sql_database import SQLDatabase
+from langchain_community.llms import OpenAI
+from sql_agent import build_sql_agent
+
 
 st.set_page_config(
     page_title="Institutional Research Chat",
@@ -221,3 +229,39 @@ with tab2:
         if st.button("🧹 Clear Chat History"):
             st.session_state.chat_history = []
             st.success("Chat history cleared.")
+
+
+# ----------- 
+# SQL Agent TAB
+# -----------
+with tab3:
+    st.subheader("SQL Explorer (Read-Only)")
+
+    connection_string = st.text_input(
+        "Enter SQLAlchemy connection string:",
+        placeholder="sqlite:////home/ashfaq93/SST/Analytics_Tool/my_database.db"
+    )
+    
+    if connection_string:
+        if "sql_agent" not in st.session_state:
+            try:
+                st.session_state.sql_agent = build_sql_agent(connection_string, temperature=0.0)
+                st.success("SQL Agent connected successfully!")
+            except Exception as e:
+                st.error(f"Could not connect to database: {e}")
+        else:
+            st.info("SQL Agent is already created. You can run queries below.")
+
+        user_query = st.text_area("Enter a question or query for your SQL database:")
+
+        if st.button("Run Query"):
+            if user_query:
+                with st.spinner("Querying database..."):
+                    try:
+                        result = st.session_state.sql_agent.run(user_query)
+                        st.markdown("### Result")
+                        st.write(result)
+                    except Exception as e:
+                        st.error(f"Error running query: {e}")
+    else:
+        st.warning("Please enter a valid connection string.")
