@@ -1,7 +1,5 @@
 #main.py
-
 import os
-import urllib.parse
 import streamlit as st
 from config import PERSIST_DIRECTORY
 from document_loaders import (
@@ -9,7 +7,6 @@ from document_loaders import (
 )
 from viewer import view_document
 from langchain.docstore.document import Document
-from langchain_community.vectorstores.utils import filter_complex_metadata
 from vector_store import get_vector_store, delete_file_vectors, get_document_count
 from vector_store import get_document_and_chunk_count
 # Import Hybrid chain
@@ -18,7 +15,7 @@ import streamlit as st
 from langchain_community.utilities.sql_database import SQLDatabase
 from langchain_community.llms import OpenAI
 from sql_agent import build_sql_agent
-
+os.environ["OPENAI_API_KEY"] = st.secrets["OPENAI_API_KEY"]
 
 st.set_page_config(
     page_title="Institutional Research Chat",
