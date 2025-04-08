@@ -8,6 +8,7 @@ from langchain.memory import ConversationSummaryMemory  # updated memory type
 from langchain_community.llms import OpenAI
 from vector_store import get_vector_store
 from langchain.prompts import PromptTemplate
+import os
 
 def convert_history(history):
     messages = []
