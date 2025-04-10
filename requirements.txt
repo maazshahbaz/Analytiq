@@ -9,5 +9,5 @@ sqlalchemy
 tiktoken
 docx2txt
 python-docx
-pypdf
+pypdf2
 openpyxl
