@@ -1,14 +1,11 @@
 # chat.py
 
 from langchain.schema import HumanMessage, AIMessage
-# Previously we used ConversationalRetrievalChain with ConversationBufferMemory.
-# Now we use ConversationSummaryMemory to automatically summarize long histories.
 from langchain.chains import ConversationalRetrievalChain
 from langchain.memory import ConversationSummaryMemory  # updated memory type
 from langchain_community.llms import OpenAI
 from vector_store import get_vector_store
 from langchain.prompts import PromptTemplate
-import os
 
 def convert_history(history):
     messages = []
@@ -24,9 +21,12 @@ def convert_history(history):
 # ----------------------
 SYSTEM_PROMPT = (
     "You are an AI assistant for an Institutional Research department. "
-    "Your goal is to provide factual answers, reference relevant document sources, "
-    "and maintain a professional and analytical tone."
+    "Speak in a friendly, conversational tone. Use short acknowledgements like "
+    "'Sure' or 'Absolutely!' before diving into the explanation. If the user might "
+    "need more detail, politely ask if they'd like more information. "
+    "Maintain overall professionalism, but feel free to be approachable."
 )
+
 
 # Build a custom QA prompt template that embeds the system instructions.
 QA_PROMPT = PromptTemplate.from_template(

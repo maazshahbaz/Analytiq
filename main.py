@@ -12,12 +12,8 @@ from viewer import view_document
 from langchain.docstore.document import Document
 from vector_store import get_vector_store, delete_file_vectors, get_document_count
 from vector_store import get_document_and_chunk_count
-# Import Hybrid chain
 from hybrid_chain import HybridQAChain
 import streamlit as st
-from langchain_community.utilities.sql_database import SQLDatabase
-from langchain_community.llms import OpenAI
-from sql_agent import build_sql_agent
 from sql_agent import build_sql_agent_with_memory
 from langchain_community.utilities.sql_database import SQLDatabase
 from langchain_community.llms import OpenAI
@@ -222,66 +218,89 @@ with tab1:
 # -----------
 with tab2:
     st.subheader("Chat with Your Documents")
+    
     if not st.session_state.uploaded_files:
         st.warning("Please upload at least one document to begin chatting.")
     else:
-        # Display existing chat messages
-        for msg in st.session_state.chat_history:
-            with st.chat_message(msg["role"]):
-                st.markdown(msg["content"])
-
-        # The input widget for new questions
-        user_input = st.chat_input("Ask something about the uploaded documents...")
-        if user_input:
-            # Immediately display user's message
-            with st.chat_message("user"):
-                st.markdown(user_input)
-
-            # Create a new chain with user-selected settings
-            hybrid_chain = HybridQAChain(
-                temperature=temperature,
-                top_k_vector=top_k_vector,
-                top_k_rerank=top_k_rerank
-            )
-
-            with st.spinner("Thinking..."):
-                result = hybrid_chain.run(user_input)
-
-            answer = result["answer"]
-            sources = result.get("source_documents", [])
-
-            # Update session state
-            st.session_state.chat_history.append(
-                {"role": "user", "content": user_input}
-            )
-            st.session_state.chat_history.append(
-                {"role": "assistant", "content": answer}
-            )
-
-            # Display assistant's answer
-            with st.chat_message("assistant"):
-                st.markdown(answer)
-                if sources:
-                    with st.expander("📚 Source Documents"):
-                        for i, doc in enumerate(sources):
-                            src = doc.metadata.get("source", "Unknown")
-                            st.markdown(f"**Source {i+1}** — `{src}`")
-                            st.markdown(
-                                f"- Department: {doc.metadata.get('department', 'N/A')}"
-                            )
-                            st.markdown(
-                                f"- Year: {doc.metadata.get('year', 'N/A')}"
-                            )
-                            # Show a snippet of the content
-                            snippet = doc.page_content[:500]
-                            st.markdown(snippet + ("..." if len(doc.page_content) > 500 else ""))
-                            if st.button("View Document", key=f"view_src_{i}_{src}"):
-                                view_document(src, st.session_state.raw_files)
-
-        # Button to clear chat history
-        if st.button("🧹 Clear Chat History"):
-            st.session_state.chat_history = []
-            st.success("Chat history cleared.")
+        # Main chat container
+        chat_container = st.container()
+        
+        # Chat input container - this will always be at the bottom
+        input_container = st.container()
+        
+        # Bottom container for clear chat button
+        bottom_container = st.container()
+        
+        # Display existing chat messages in the chat container
+        with chat_container:
+            # Keep track of all document buttons across different messages
+            doc_button_count = 0
+            
+            for msg_idx, msg in enumerate(st.session_state.chat_history):
+                with st.chat_message(msg["role"]):
+                    st.markdown(msg["content"])
+                    
+                    # Only show sources for assistant messages
+                    if msg["role"] == "assistant" and "sources" in msg:
+                        sources = msg["sources"]
+                        if sources:
+                            with st.expander("📚 Source Documents"):
+                                for i, doc in enumerate(sources):
+                                    src = doc.metadata.get("source", "Unknown")
+                                    st.markdown(f"**Source {i+1}** — `{src}`")
+                                    st.markdown(f"- Department: {doc.metadata.get('department', 'N/A')}")
+                                    st.markdown(f"- Year: {doc.metadata.get('year', 'N/A')}")
+                                    # Show a snippet of the content
+                                    snippet = doc.page_content[:500]
+                                    st.markdown(snippet + ("..." if len(doc.page_content) > 500 else ""))
+                                    
+                                    # Create a unique key for each button using a global counter
+                                    button_key = f"view_doc_{msg_idx}_{i}_{doc_button_count}"
+                                    doc_button_count += 1
+                                    
+                                    if st.button("View Document", key=button_key):
+                                        view_document(src, st.session_state.raw_files)
+        
+        # Input area always stays at the bottom of the conversation
+        with input_container:
+            user_input = st.chat_input("Ask something about the uploaded documents...")
+            
+            if user_input:
+                # Immediately display user's message
+                with st.chat_message("user"):
+                    st.markdown(user_input)
+                
+                # Add to session state
+                st.session_state.chat_history.append(
+                    {"role": "user", "content": user_input}
+                )
+                
+                # Create a new chain with user-selected settings
+                hybrid_chain = HybridQAChain(
+                    temperature=temperature,
+                    top_k_vector=top_k_vector,
+                    top_k_rerank=top_k_rerank
+                )
+                
+                with st.spinner("Thinking..."):
+                    result = hybrid_chain.run(user_input)
+                
+                answer = result["answer"]
+                sources = result.get("source_documents", [])
+                
+                # Add assistant's response to history with sources
+                st.session_state.chat_history.append(
+                    {"role": "assistant", "content": answer, "sources": sources}
+                )
+                
+                # Force a rerun to update the UI with the new messages
+                st.rerun()
+        
+        # Clear chat button at the very bottom
+        with bottom_container:
+            if st.button("🧹 Clear Chat History"):
+                st.session_state.chat_history = []
+                st.rerun()  # Force a rerun to update the UI
 
 # ----------- 
 # SQL Agent TAB (Multi-Tab Layout)
