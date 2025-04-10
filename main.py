@@ -27,13 +27,18 @@ from pandas_agent import (
     explain_dataframes
 )
 #os.environ["OPENAI_API_KEY"] = st.secrets["OPENAI_API_KEY"]
-openai_key = os.environ.get("OPENAI_API_KEY") or st.secrets.get("OPENAI_API_KEY")
+# Get OpenAI API key from Render environment (or local secrets if available)
+openai_key = os.environ.get("OPENAI_API_KEY")
+
+# Only try st.secrets if it actually has the key (avoid crashing)
+if not openai_key and "OPENAI_API_KEY" in st.secrets:
+    openai_key = st.secrets["OPENAI_API_KEY"]
 
 if not openai_key:
-    st.error("🚨 OPENAI_API_KEY not found. Please set it in Render environment variables.")
+    st.error("🚨 OPENAI_API_KEY is missing. Please add it in Render → Environment.")
 else:
     os.environ["OPENAI_API_KEY"] = openai_key
-    
+
 st.set_page_config(
     page_title="Institutional Research Chat",
     page_icon=":bar_chart:",
