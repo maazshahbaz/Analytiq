@@ -3,13 +3,27 @@ import os
 from langchain_community.embeddings import OpenAIEmbeddings
 from langchain_community.vectorstores import Chroma
 from config import PERSIST_DIRECTORY, COLLECTION_NAME
+from chromadb.config import Settings
 
-def get_vector_store():
+
+
+# Set up ChromaDB settings for deploying it on streamlit 
+'''def get_vector_store():
     return Chroma(
         embedding_function=OpenAIEmbeddings(),
         persist_directory=PERSIST_DIRECTORY,
         collection_name=COLLECTION_NAME
+    )'''
+from langchain_community.vectorstores import Chroma
+from chromadb.config import Settings
+
+def get_vector_store():
+    return Chroma(
+        persist_directory="db",  # optional: set a path if you want to persist locally (may not work on Streamlit Cloud)
+        embedding_function=...,  # your embedding function
+        client_settings=Settings(chroma_api_impl="chromadb.api.local.LocalAPI")  # Force local API
     )
+
 
 def get_document_count():
     """Return the number of documents in the Chroma collection."""
