@@ -11,3 +11,4 @@ docx2txt
 python-docx
 pypdf2
 openpyxl
+langchain-openai
