@@ -27,19 +27,12 @@ from pandas_agent import (
     explain_dataframes
 )
 #os.environ["OPENAI_API_KEY"] = st.secrets["OPENAI_API_KEY"]
-# Get OpenAI API key from Render environment (or local secrets if available)
+
 
 openai_key = os.environ.get("OPENAI_API_KEY")
 
-# This block will only run locally when the file exists
-try:
-    if not openai_key:
-        openai_key = st.secrets["OPENAI_API_KEY"]
-except st.errors.StreamlitSecretNotFoundError:
-    pass
-
 if not openai_key:
-    st.error("❌ OPENAI_API_KEY is missing. Set it in Render environment variables.")
+    st.error("❌ OPENAI_API_KEY is missing. Add it in Render → Environment.")
 else:
     os.environ["OPENAI_API_KEY"] = openai_key
 
