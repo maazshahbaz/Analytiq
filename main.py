@@ -29,13 +29,6 @@ from pandas_agent import (
 #os.environ["OPENAI_API_KEY"] = st.secrets["OPENAI_API_KEY"]
 
 
-openai_key = os.environ.get("OPENAI_API_KEY")
-
-if not openai_key:
-    st.error("❌ OPENAI_API_KEY is missing. Add it in Render → Environment.")
-else:
-    os.environ["OPENAI_API_KEY"] = openai_key
-
 st.set_page_config(
     page_title="Institutional Research Chat",
     page_icon=":bar_chart:",
@@ -46,6 +39,15 @@ st.title("📊 Institutional Research AI Assistant")
 st.write(
     "Welcome! Upload documents, chat with them, and easily find the info you need."
 )
+
+
+openai_key = os.environ.get("OPENAI_API_KEY")
+
+if not openai_key:
+    st.error("❌ OPENAI_API_KEY is missing. Add it in Render → Environment.")
+else:
+    os.environ["OPENAI_API_KEY"] = openai_key
+
 
 # --------------------
 # Sidebar - Parameters
