@@ -1,6 +1,9 @@
 #main.py
 import os
+import re
+import json
 import streamlit as st
+import pandas as pd
 from config import PERSIST_DIRECTORY
 from document_loaders import (
     load_pdf, load_docx, load_excel, load_csv, text_splitter
@@ -15,6 +18,18 @@ import streamlit as st
 from langchain_community.utilities.sql_database import SQLDatabase
 from langchain_community.llms import OpenAI
 from sql_agent import build_sql_agent
+from sql_agent import build_sql_agent_with_memory
+from langchain_community.utilities.sql_database import SQLDatabase
+from langchain_community.llms import OpenAI
+from langchain.agents import create_sql_agent, AgentType
+from read_only_sql_tool import ReadOnlyQuerySQLDataBaseTool
+from langchain.memory import ConversationBufferMemory
+from pandas_agent import build_pandas_agent_with_memory
+from pandas_agent import build_pandas_agent_with_memory, explain_dataframes
+from pandas_agent import (
+    build_pandas_agent_with_memory,
+    explain_dataframes
+)
 os.environ["OPENAI_API_KEY"] = st.secrets["OPENAI_API_KEY"]
 
 st.set_page_config(
@@ -64,14 +79,55 @@ if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 if "raw_files" not in st.session_state:
     st.session_state.raw_files = {}
+if "conversation" not in st.session_state:
+    st.session_state.conversation = []
+if "pandas_files" not in st.session_state:
+    st.session_state.pandas_files = {} 
+if "pandas_conversation" not in st.session_state:
+    st.session_state.pandas_conversation = []
 
 # Initialize the vector store once
 vector_store = get_vector_store()
 
+
+# File to store persistent conversation history associated with each connection string
+CONVERSATION_FILE = "sql_conversations.json"
+
+def load_all_connection_strings():
+    """Load all previously used connection strings from the conversation file."""
+    if os.path.exists(CONVERSATION_FILE):
+        with open(CONVERSATION_FILE, "r") as f:
+            all_conversations = json.load(f)
+        return list(all_conversations.keys())
+    return []
+
+def load_conversation(connection_string):
+    """Load conversation history for a given connection string."""
+    if os.path.exists(CONVERSATION_FILE):
+        with open(CONVERSATION_FILE, "r") as f:
+            all_conversations = json.load(f)
+        return all_conversations.get(connection_string, [])
+    return []
+
+def save_conversation(connection_string, conversation):
+    """Persist the conversation history for the given connection string."""
+    all_conversations = {}
+    if os.path.exists(CONVERSATION_FILE):
+        with open(CONVERSATION_FILE, "r") as f:
+            all_conversations = json.load(f)
+    all_conversations[connection_string] = conversation
+    with open(CONVERSATION_FILE, "w") as f:
+        json.dump(all_conversations, f)
+
 # ----------------
 # Tabs for the App
 # ----------------
-tab1, tab2, tab3 = st.tabs(["📁 Document Management", "💬 Chat", "🔍 SQL & Data Explorer"])
+tab1, tab2, tab3, tab4 = st.tabs([
+    "📁 Document Management", 
+    "💬 Chat", 
+    "🔍 SQL & Data Explorer", 
+    "📊 Pandas Agent"
+])
 
 
 # ---------------
@@ -227,38 +283,224 @@ with tab2:
             st.session_state.chat_history = []
             st.success("Chat history cleared.")
 
-
 # ----------- 
-# SQL Agent TAB
+# SQL Agent TAB (Multi-Tab Layout)
 # -----------
 with tab3:
     st.subheader("SQL Explorer (Read-Only)")
 
-    connection_string = st.text_input(
-        "Enter SQLAlchemy connection string:",
-        placeholder="sqlite:////home/ashfaq93/SST/Analytics_Tool/my_database.db"
-    )
-    
-    if connection_string:
-        if "sql_agent" not in st.session_state:
-            try:
-                st.session_state.sql_agent = build_sql_agent(connection_string, temperature=0.0)
-                st.success("SQL Agent connected successfully!")
-            except Exception as e:
-                st.error(f"Could not connect to database: {e}")
+    # Create two sub-tabs inside the SQL & Data Explorer tab:
+    sub_tab_conn, sub_tab_chat = st.tabs(["Connections", "Chat"])
+
+    # ----------------------------
+    # Sub-Tab 1: Connections
+    # ----------------------------
+    with sub_tab_conn:
+        st.markdown("### Manage Connection")
+        
+        # List previously used connections (from persistent storage)
+        previous_connections = load_all_connection_strings()
+        if previous_connections:
+            selected_connection = st.selectbox(
+                "Previously used connections:",
+                options=previous_connections,
+                index=0
+            )
         else:
-            st.info("SQL Agent is already created. You can run queries below.")
+            selected_connection = ""
 
-        user_query = st.text_area("Enter a question or query for your SQL database:")
+        # Allow user to enter a new connection or use the selected one
+        connection_string_input = st.text_input(
+            "Enter SQLAlchemy connection string:",
+            value=selected_connection if selected_connection else "",
+            placeholder="sqlite:////full/path/to/database.db"
+        )
+        
+        # Button to load or switch connection
+        if st.button("Load Connection", key="load_conn_button"):
+            if connection_string_input:
+                try:
+                    # Build the SQL agent using the memory-enabled builder.
+                    st.session_state.sql_agent = build_sql_agent_with_memory(connection_string_input, temperature=0.0)
+                    st.session_state.current_connection = connection_string_input
+                    # Load existing conversation history if available.
+                    st.session_state.conversation = load_conversation(connection_string_input)
+                    st.success(f"Connection '{connection_string_input}' loaded successfully!")
+                except Exception as e:
+                    st.error(f"Could not connect: {e}")
+            else:
+                st.warning("Please enter a valid connection string.")
 
-        if st.button("Run Query"):
+
+    # ----------------------------
+    # Sub-Tab 2: Chat
+    # ----------------------------
+    # In the "Chat" sub-tab of the SQL Agent tab
+with sub_tab_chat:
+    if "current_connection" not in st.session_state:
+        st.info("No connection loaded. Please go to the 'Connections' tab to load a connection.")
+    else:
+        # Create a placeholder for the conversation display.
+        conversation_placeholder = st.empty()
+
+        def render_conversation():
+            """Render the conversation as a markdown string."""
+            conversation_md = ""
+            for message in st.session_state.conversation:
+                role = message.get("role")
+                content = message.get("content")
+                if role == "user":
+                    conversation_md += f"**User:** {content}\n\n"
+                else:
+                    conversation_md += f"**SQL Agent:** {content}\n\n"
+            return conversation_md
+
+        # Initially display the conversation.
+        conversation_placeholder.markdown(render_conversation())
+
+        # Option to clear the conversation.
+        if st.button("Clear Conversation", key="clear_sql_conversation"):
+            st.session_state.conversation = []
+            save_conversation(st.session_state.current_connection, st.session_state.conversation)
+            conversation_placeholder.markdown(render_conversation())
+            st.success("Conversation cleared!")
+
+        # Input field for new SQL query or question.
+        user_query = st.text_area("Enter your SQL query or question:", key="sql_query_input")
+        if st.button("Send Query", key="send_query"):
             if user_query:
+                # Append the user's query to the conversation.
+                st.session_state.conversation.append({"role": "user", "content": user_query})
+                conversation_placeholder.markdown(render_conversation())  # Update display immediately.
                 with st.spinner("Querying database..."):
                     try:
                         result = st.session_state.sql_agent.run(user_query)
-                        st.markdown("### Result")
-                        st.write(result)
+                        # Append the agent's response.
+                        st.session_state.conversation.append({"role": "assistant", "content": str(result)})
+                        # Save updated conversation.
+                        save_conversation(st.session_state.current_connection, st.session_state.conversation)
+                        # Update conversation display with the new messages.
+                        conversation_placeholder.markdown(render_conversation())
                     except Exception as e:
                         st.error(f"Error running query: {e}")
-    else:
-        st.warning("Please enter a valid connection string.")
+            else:
+                st.warning("Please enter a query.")
+
+# -----------
+# PANDAS AGENT TAB (Multi-Tab Layout with Buffer Memory) - NEW CODE
+# -----------
+with tab4:
+    st.subheader("Pandas Agent")
+    sub_tab_files, sub_tab_chat = st.tabs(["Files", "Chat"])
+    
+    # --- Sub-Tab: Files ---
+    with sub_tab_files:
+        st.markdown("### Upload and Manage CSV/Excel Files")
+
+        uploaded_pandas_files = st.file_uploader(
+            "Upload CSV/Excel files",
+            type=["csv", "xlsx"],
+            accept_multiple_files=True
+        )
+        if uploaded_pandas_files:
+            for file in uploaded_pandas_files:
+                if file.name not in st.session_state.pandas_files:
+                    try:
+                        if file.name.lower().endswith('.csv'):
+                            df = pd.read_csv(file)
+                            # store as { "Sheet1": df } so everything is consistent
+                            st.session_state.pandas_files[file.name] = {"Sheet1": df}
+                        elif file.name.lower().endswith('.xlsx'):
+                            df_sheets = pd.read_excel(file, sheet_name=None) 
+                            st.session_state.pandas_files[file.name] = df_sheets
+                    except Exception as e:
+                        st.error(f"Error processing file {file.name}: {e}")
+            st.success("Files uploaded successfully!")
+            st.write("### Uploaded Files:")
+            st.write(list(st.session_state.pandas_files.keys()))
+        else:
+            st.info("Please upload CSV or Excel files.")
+
+        if st.session_state.pandas_files:
+            selected_removals = st.multiselect(
+                "Select files to remove",
+                options=list(st.session_state.pandas_files.keys())
+            )
+            if st.button("Remove Selected Files"):
+                for fname in selected_removals:
+                    st.session_state.pandas_files.pop(fname, None)
+                st.success("Selected files removed.")
+    
+    # --- Sub-Tab: Chat ---
+    with sub_tab_chat:
+        if not st.session_state.pandas_files:
+            st.info("No files uploaded. Please upload files in the Files tab.")
+        else:
+            selected_file_names = st.multiselect(
+                "Select one or two files for analysis",
+                options=list(st.session_state.pandas_files.keys())
+            )
+            if not selected_file_names:
+                st.info("Please select at least one file to proceed.")
+            else:
+                # selected_dataframes is {file_name: {sheet_name: DataFrame}}
+                selected_dataframes = {fname: st.session_state.pandas_files[fname] for fname in selected_file_names}
+                
+                # Display each file's sheets
+                if len(selected_dataframes) == 1:
+                    file_key = selected_file_names[0]
+                    st.markdown(f"### Previews for '{file_key}'")
+                    sheets_dict = selected_dataframes[file_key]
+                    for sheet_name, df in sheets_dict.items():
+                        with st.expander(f"Preview of Sheet '{sheet_name}' in '{file_key}'"):
+                            st.dataframe(df)
+                else:
+                    st.markdown("### Previews of Selected Files")
+                    for fname, sheets_dict in selected_dataframes.items():
+                        st.markdown(f"## File: '{fname}'")
+                        for sheet_name, df in sheets_dict.items():
+                            with st.expander(f"Preview of Sheet '{sheet_name}'"):
+                                st.dataframe(df)
+                
+                # Build the memory-enabled agent
+                pandas_agent = build_pandas_agent_with_memory(selected_dataframes, temperature=0.0)
+                
+                # Conversation placeholder
+                conversation_placeholder = st.empty()
+                def render_pandas_conversation():
+                    conversation_md = ""
+                    for msg in st.session_state.pandas_conversation:
+                        role = msg.get("role")
+                        content = msg.get("content")
+                        if role == "user":
+                            conversation_md += f"**User:** {content}\n\n"
+                        else:
+                            conversation_md += f"**Agent:** {content}\n\n"
+                    return conversation_md
+                
+                # Automatic explanation if conversation is empty
+                if not st.session_state.pandas_conversation:
+                    with st.spinner("Generating detailed file explanation..."):
+                        try:
+                            explanation = explain_dataframes(selected_dataframes, pandas_agent)
+                            st.session_state.pandas_conversation.append({"role": "agent", "content": explanation})
+                        except Exception as e:
+                            st.error(f"Error generating file explanation: {e}")
+                    conversation_placeholder.markdown(render_pandas_conversation())
+                
+                # Follow-up queries
+                user_query = st.text_area("Enter your query regarding the selected files:", key="pandas_query_input")
+                if st.button("Send Query", key="send_query_pandas"):
+                    if user_query:
+                        st.session_state.pandas_conversation.append({"role": "user", "content": user_query})
+                        conversation_placeholder.markdown(render_pandas_conversation())
+                        with st.spinner("Analyzing..."):
+                            try:
+                                result = pandas_agent(user_query)
+                                st.session_state.pandas_conversation.append({"role": "agent", "content": str(result)})
+                                conversation_placeholder.markdown(render_pandas_conversation())
+                            except Exception as e:
+                                st.error(f"Error processing query: {e}")
+                    else:
+                        st.warning("Please enter a query.")
+
