@@ -26,8 +26,14 @@ from pandas_agent import (
     build_pandas_agent_with_memory,
     explain_dataframes
 )
-os.environ["OPENAI_API_KEY"] = st.secrets["OPENAI_API_KEY"]
+#os.environ["OPENAI_API_KEY"] = st.secrets["OPENAI_API_KEY"]
+openai_key = os.environ.get("OPENAI_API_KEY") or st.secrets.get("OPENAI_API_KEY")
 
+if not openai_key:
+    st.error("🚨 OPENAI_API_KEY not found. Please set it in Render environment variables.")
+else:
+    os.environ["OPENAI_API_KEY"] = openai_key
+    
 st.set_page_config(
     page_title="Institutional Research Chat",
     page_icon=":bar_chart:",
