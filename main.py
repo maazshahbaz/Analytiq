@@ -9,6 +9,7 @@ from document_loaders import (
     load_pdf, load_docx, load_excel, load_csv, text_splitter
 )
 from viewer import view_document
+from create_test_db import create_and_populate_db
 from langchain.docstore.document import Document
 from vector_store import get_vector_store, delete_file_vectors, get_document_count
 from vector_store import get_document_and_chunk_count
@@ -48,7 +49,10 @@ if not openai_key:
 else:
     os.environ["OPENAI_API_KEY"] = openai_key
 
-
+DB_PATH = "my_database.db"  # or the appropriate path
+if not os.path.exists(DB_PATH):
+    create_and_populate_db(DB_PATH)
+    print("Database created and populated.")
 # --------------------
 # Sidebar - Parameters
 # --------------------
