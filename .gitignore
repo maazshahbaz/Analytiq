@@ -1,7 +1,6 @@
 # — Virtual environments —
-AnalytqiVenv/
-.venv/
-env/
+.AnalytiqVenv/
+
 
 # — Python bytecode/cache —
 __pycache__/
