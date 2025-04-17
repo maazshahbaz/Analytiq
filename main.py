@@ -18,24 +18,29 @@ from sql_agent_with_memory import build_sql_agent_with_memory
 from langchain.memory import ConversationBufferMemory
 from openai import OpenAI as OpenAIClient
 from pandas_agent.viewer import view_document
-
+from streamlit.runtime.secrets import StreamlitSecretNotFoundError
 # —————————————————————————————————————————————————————————————
-# Load API keys (env vars take priority; fallback to .streamlit/secrets.toml)
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY") or st.secrets.get("OPENAI_API_KEY")
-COHERE_API_KEY  = os.getenv("COHERE_API_KEY")  or st.secrets.get("COHERE_API_KEY")
+try:
+    _secrets = st.secrets
+except StreamlitSecretNotFoundError:
+    _secrets = {}
+
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY") or _secrets.get("OPENAI_API_KEY")
+COHERE_API_KEY  = os.getenv("COHERE_API_KEY")  or _secrets.get("COHERE_API_KEY")
 
 if not OPENAI_API_KEY or not COHERE_API_KEY:
     st.error(
-        "❌ Missing API key(s)! Please set OPENAI_API_KEY and COHERE_API_KEY "
-        "as environment variables or in `.streamlit/secrets.toml` for local dev."
+        "❌ Missing API key(s)! Please set OPENAI_API_KEY and COHERE_API_KEY\n"
+        "– as Environment Variables in Render, or in `.streamlit/secrets.toml` locally."
     )
     st.stop()
 
-# Inject into environment for libraries that rely on env vars
+# Inject into environment so downstream libs pick them up
 os.environ["OPENAI_API_KEY"] = OPENAI_API_KEY
-os.environ["COHERE_API_KEY"] = COHERE_API_KEY
+os.environ["COHERE_API_KEY"]  = COHERE_API_KEY
 
-# Initialize OpenAI client for session usage
+# Initialize shared OpenAI client
+from openai import OpenAI as OpenAIClient
 if "openai_client" not in st.session_state:
     st.session_state.openai_client = OpenAIClient(api_key=OPENAI_API_KEY)
 
