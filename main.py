@@ -13,31 +13,31 @@ from langchain.docstore.document import Document
 from vector_store import get_vector_store, delete_file_vectors, get_document_count
 from vector_store import get_document_and_chunk_count
 from hybrid_chain import HybridQAChain
-import streamlit as st
 from pandas_agent import build_pandas_agent_with_memory, explain_dataframes
 from sql_agent_with_memory import build_sql_agent_with_memory
 from langchain.memory import ConversationBufferMemory
-import os
-import streamlit as st
-from openai import OpenAI
+from openai import OpenAI as OpenAIClient
 from pandas_agent.viewer import view_document
 
-# Load API keys from Streamlit secrets
-if "OPENAI_API_KEY" in st.secrets:
-    openai_api_key = st.secrets["OPENAI_API_KEY"]
-    # Set environment variable (some libraries check here)
-    os.environ["OPENAI_API_KEY"] = openai_api_key
-    
-    # Create a client instance that we can share
-    st.session_state.openai_client = OpenAI(api_key=openai_api_key)
-else:
-    st.error("OpenAI API key not found in secrets!")
+# —————————————————————————————————————————————————————————————
+# Load API keys (env vars take priority; fallback to .streamlit/secrets.toml)
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY") or st.secrets.get("OPENAI_API_KEY")
+COHERE_API_KEY  = os.getenv("COHERE_API_KEY")  or st.secrets.get("COHERE_API_KEY")
+
+if not OPENAI_API_KEY or not COHERE_API_KEY:
+    st.error(
+        "❌ Missing API key(s)! Please set OPENAI_API_KEY and COHERE_API_KEY "
+        "as environment variables or in `.streamlit/secrets.toml` for local dev."
+    )
     st.stop()
 
-# Similarly for Cohere if needed
-if "COHERE_API_KEY" in st.secrets:
-    os.environ["COHERE_API_KEY"] = st.secrets["COHERE_API_KEY"]
+# Inject into environment for libraries that rely on env vars
+os.environ["OPENAI_API_KEY"] = OPENAI_API_KEY
+os.environ["COHERE_API_KEY"] = COHERE_API_KEY
 
+# Initialize OpenAI client for session usage
+if "openai_client" not in st.session_state:
+    st.session_state.openai_client = OpenAIClient(api_key=OPENAI_API_KEY)
 
 st.set_page_config(
     page_title="Institutional Research Chat",
