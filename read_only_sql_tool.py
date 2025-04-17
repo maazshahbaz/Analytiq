@@ -1,15 +1,20 @@
-# read_only_sql_tool.py
+# read_only_sql_tool.py   
 from langchain_community.tools.sql_database.tool import QuerySQLDataBaseTool
 
 class ReadOnlyQuerySQLDataBaseTool(QuerySQLDataBaseTool):
     """
-    A read-only version of QuerySQLDataBaseTool.
-    It checks if the query starts with SELECT or WITH,
-    raising an error otherwise.
+    Drop‑in replacement for QuerySQLDataBaseTool that refuses
+    any statement not starting with SELECT or WITH.
     """
 
     def _run(self, query: str):
-        safe_query = query.lower().strip()
-        if not (safe_query.startswith("select") or safe_query.startswith("with")):
-            raise ValueError("Only SELECT/WITH queries allowed in read-only mode.")
+        safe = query.lower().lstrip()
+        if not (safe.startswith("select") or safe.startswith("with")):
+            raise ValueError("Only SELECT / WITH statements are allowed in read‑only mode.")
         return super()._run(query)
+
+    async def _arun(self, query: str):
+        safe = query.lower().lstrip()
+        if not (safe.startswith("select") or safe.startswith("with")):
+            raise ValueError("Only SELECT / WITH statements are allowed in read‑only mode.")
+        return await super()._arun(query)

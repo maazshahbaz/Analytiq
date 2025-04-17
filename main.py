@@ -8,26 +8,35 @@ from config import PERSIST_DIRECTORY
 from document_loaders import (
     load_pdf, load_docx, load_excel, load_csv, text_splitter
 )
-from viewer import view_document
 from create_test_db import create_and_populate_db
 from langchain.docstore.document import Document
 from vector_store import get_vector_store, delete_file_vectors, get_document_count
 from vector_store import get_document_and_chunk_count
 from hybrid_chain import HybridQAChain
 import streamlit as st
-from sql_agent import build_sql_agent_with_memory
-from langchain_community.utilities.sql_database import SQLDatabase
-from langchain_community.llms import OpenAI
-from langchain.agents import create_sql_agent, AgentType
-from read_only_sql_tool import ReadOnlyQuerySQLDataBaseTool
-from langchain.memory import ConversationBufferMemory
-from pandas_agent import build_pandas_agent_with_memory
 from pandas_agent import build_pandas_agent_with_memory, explain_dataframes
-from pandas_agent import (
-    build_pandas_agent_with_memory,
-    explain_dataframes
-)
-#os.environ["OPENAI_API_KEY"] = st.secrets["OPENAI_API_KEY"]
+from sql_agent_with_memory import build_sql_agent_with_memory
+from langchain.memory import ConversationBufferMemory
+import os
+import streamlit as st
+from openai import OpenAI
+from pandas_agent.viewer import view_document
+
+# Load API keys from Streamlit secrets
+if "OPENAI_API_KEY" in st.secrets:
+    openai_api_key = st.secrets["OPENAI_API_KEY"]
+    # Set environment variable (some libraries check here)
+    os.environ["OPENAI_API_KEY"] = openai_api_key
+    
+    # Create a client instance that we can share
+    st.session_state.openai_client = OpenAI(api_key=openai_api_key)
+else:
+    st.error("OpenAI API key not found in secrets!")
+    st.stop()
+
+# Similarly for Cohere if needed
+if "COHERE_API_KEY" in st.secrets:
+    os.environ["COHERE_API_KEY"] = st.secrets["COHERE_API_KEY"]
 
 
 st.set_page_config(
@@ -56,6 +65,9 @@ if not os.path.exists(DB_PATH):
 # --------------------
 # Sidebar - Parameters
 # --------------------
+sheet_filter = st.sidebar.text_input(
+    "Restrict search to sheet name (optional)", placeholder="e.g., Admissions_23"
+)
 st.sidebar.header("Advanced Chat Settings")
 temperature = st.sidebar.slider(
     "LLM Temperature",
@@ -129,6 +141,20 @@ def save_conversation(connection_string, conversation):
     with open(CONVERSATION_FILE, "w") as f:
         json.dump(all_conversations, f)
 
+def save_connection_string(connection_string):
+    """Persist a new connection string to the conversation file."""
+    all_conversations = {}
+    if os.path.exists(CONVERSATION_FILE):
+        with open(CONVERSATION_FILE, "r") as f:
+            all_conversations = json.load(f)
+    
+    # Add the connection string as a key with empty conversation if not exists
+    if connection_string not in all_conversations:
+        all_conversations[connection_string] = []
+        
+    # Save back to the file
+    with open(CONVERSATION_FILE, "w") as f:
+        json.dump(all_conversations, f)
 # ----------------
 # Tabs for the App
 # ----------------
@@ -185,7 +211,7 @@ with tab1:
                 doc_chunks = text_splitter.split_documents(docs)
 
                 # Add them to the vector store with all enriched metadata
-                vector_store.add_documents(doc_chunks)
+                vector_store.add_documents(doc_chunks, batch_size=128)
                 vector_store.persist()
 
                 # Keep track of uploaded file
@@ -293,7 +319,8 @@ with tab2:
                 hybrid_chain = HybridQAChain(
                     temperature=temperature,
                     top_k_vector=top_k_vector,
-                    top_k_rerank=top_k_rerank
+                    top_k_rerank=top_k_rerank,
+                    sheet_filter=sheet_filter.strip() or None,
                 )
                 
                 with st.spinner("Thinking..."):
@@ -353,17 +380,23 @@ with tab3:
         if st.button("Load Connection", key="load_conn_button"):
             if connection_string_input:
                 try:
-                    # Build the SQL agent using the memory-enabled builder.
-                    st.session_state.sql_agent = build_sql_agent_with_memory(connection_string_input, temperature=0.0)
-                    st.session_state.current_connection = connection_string_input
-                    # Load existing conversation history if available.
-                    st.session_state.conversation = load_conversation(connection_string_input)
-                    st.success(f"Connection '{connection_string_input}' loaded successfully!")
+                    with st.spinner("Connecting to database and initializing SQL agent..."):
+                        # Build the SQL agent using the memory-enabled builder.
+                        st.session_state.sql_agent = build_sql_agent_with_memory(connection_string_input, temperature=0.0)
+                        st.session_state.current_connection = connection_string_input
+                        
+                        # Save this connection string for future use if it's new
+                        if connection_string_input not in previous_connections:
+                            save_connection_string(connection_string_input)
+                        
+                        # Load existing conversation history if available.
+                        st.session_state.conversation = load_conversation(connection_string_input)
+                        st.success(f"Connection '{connection_string_input}' loaded successfully!")
                 except Exception as e:
-                    st.error(f"Could not connect: {e}")
+                    st.error(f"Could not connect: {str(e)}")
+                    st.expander("Detailed Error Information").code(str(e), language="text")
             else:
                 st.warning("Please enter a valid connection string.")
-
 
     # ----------------------------
     # Sub-Tab 2: Chat
@@ -419,8 +452,8 @@ with sub_tab_chat:
             else:
                 st.warning("Please enter a query.")
 
-# -----------
-# PANDAS AGENT TAB (Multi-Tab Layout with Buffer Memory) - NEW CODE
+# ----------- 
+# PANDAS AGENT TAB (Multi-Tab Layout with Buffer Memory)
 # -----------
 with tab4:
     st.subheader("Pandas Agent")
@@ -439,18 +472,29 @@ with tab4:
             for file in uploaded_pandas_files:
                 if file.name not in st.session_state.pandas_files:
                     try:
-                        if file.name.lower().endswith('.csv'):
-                            df = pd.read_csv(file)
-                            # store as { "Sheet1": df } so everything is consistent
+                        if file.name.lower().endswith(".csv"):
+                            # Treat various missing‑value markers as NaN
+                            df = pd.read_csv(file, na_values=["---", "NA", "n/a"])
                             st.session_state.pandas_files[file.name] = {"Sheet1": df}
-                        elif file.name.lower().endswith('.xlsx'):
-                            df_sheets = pd.read_excel(file, sheet_name=None) 
+
+                        elif file.name.lower().endswith(".xlsx"):
+                            # Read all sheets, coerce mixed‑type numeric columns
+                            df_sheets = pd.read_excel(
+                                file,
+                                sheet_name=None,
+                                na_values=["---", "NA", "n/a"]
+                            )
+                            for sheet, df in df_sheets.items():
+                                df_sheets[sheet] = df.apply(pd.to_numeric, errors="ignore")
                             st.session_state.pandas_files[file.name] = df_sheets
+
                     except Exception as e:
                         st.error(f"Error processing file {file.name}: {e}")
+
             st.success("Files uploaded successfully!")
             st.write("### Uploaded Files:")
             st.write(list(st.session_state.pandas_files.keys()))
+
         else:
             st.info("Please upload CSV or Excel files.")
 
@@ -476,15 +520,17 @@ with tab4:
             if not selected_file_names:
                 st.info("Please select at least one file to proceed.")
             else:
-                # selected_dataframes is {file_name: {sheet_name: DataFrame}}
-                selected_dataframes = {fname: st.session_state.pandas_files[fname] for fname in selected_file_names}
+                # Grab the dict of DataFrames for the selected file(s)
+                selected_dataframes = {
+                    fname: st.session_state.pandas_files[fname]
+                    for fname in selected_file_names
+                }
                 
-                # Display each file's sheets
+                # Show previews
                 if len(selected_dataframes) == 1:
                     file_key = selected_file_names[0]
                     st.markdown(f"### Previews for '{file_key}'")
-                    sheets_dict = selected_dataframes[file_key]
-                    for sheet_name, df in sheets_dict.items():
+                    for sheet_name, df in selected_dataframes[file_key].items():
                         with st.expander(f"Preview of Sheet '{sheet_name}' in '{file_key}'"):
                             st.dataframe(df)
                 else:
@@ -495,45 +541,65 @@ with tab4:
                             with st.expander(f"Preview of Sheet '{sheet_name}'"):
                                 st.dataframe(df)
                 
-                # Build the memory-enabled agent
-                pandas_agent = build_pandas_agent_with_memory(selected_dataframes, temperature=0.0)
+                # Build the memory‑enabled agent
+                pandas_agent = build_pandas_agent_with_memory(
+                    selected_dataframes, temperature=0.0
+                )
                 
-                # Conversation placeholder
+                # Placeholder for conversation
                 conversation_placeholder = st.empty()
                 def render_pandas_conversation():
                     conversation_md = ""
                     for msg in st.session_state.pandas_conversation:
-                        role = msg.get("role")
-                        content = msg.get("content")
-                        if role == "user":
-                            conversation_md += f"**User:** {content}\n\n"
-                        else:
-                            conversation_md += f"**Agent:** {content}\n\n"
+                        prefix = "**User:**" if msg["role"] == "user" else "**Agent:**"
+                        conversation_md += f"{prefix} {msg['content']}\n\n"
                     return conversation_md
                 
-                # Automatic explanation if conversation is empty
+                # Automatic initial explanation
                 if not st.session_state.pandas_conversation:
                     with st.spinner("Generating detailed file explanation..."):
                         try:
-                            explanation = explain_dataframes(selected_dataframes, pandas_agent)
-                            st.session_state.pandas_conversation.append({"role": "agent", "content": explanation})
+                            explanation = explain_dataframes(
+                                selected_dataframes, pandas_agent
+                            )
+                            st.session_state.pandas_conversation.append({
+                                "role": "agent", "content": explanation
+                            })
                         except Exception as e:
                             st.error(f"Error generating file explanation: {e}")
                     conversation_placeholder.markdown(render_pandas_conversation())
                 
-                # Follow-up queries
-                user_query = st.text_area("Enter your query regarding the selected files:", key="pandas_query_input")
+                # Follow‑up queries
+                user_query = st.text_area(
+                    "Enter your query regarding the selected files:",
+                    key="pandas_query_input"
+                )
                 if st.button("Send Query", key="send_query_pandas"):
                     if user_query:
-                        st.session_state.pandas_conversation.append({"role": "user", "content": user_query})
+                        # If only one file, mention its name so agent knows the context
+                        if len(selected_file_names) == 1:
+                            fname = selected_file_names[0]
+                            augmented = f"For file '{fname}', {user_query}"
+                        else:
+                            augmented = user_query
+
+                        # Save & display user's question
+                        st.session_state.pandas_conversation.append({
+                            "role": "user", "content": user_query
+                        })
                         conversation_placeholder.markdown(render_pandas_conversation())
+
+                        # Ask the agent
                         with st.spinner("Analyzing..."):
                             try:
-                                result = pandas_agent(user_query)
-                                st.session_state.pandas_conversation.append({"role": "agent", "content": str(result)})
-                                conversation_placeholder.markdown(render_pandas_conversation())
+                                result = pandas_agent(augmented)
+                                st.session_state.pandas_conversation.append({
+                                    "role": "agent", "content": str(result)
+                                })
+                                conversation_placeholder.markdown(
+                                    render_pandas_conversation()
+                                )
                             except Exception as e:
                                 st.error(f"Error processing query: {e}")
                     else:
                         st.warning("Please enter a query.")
-

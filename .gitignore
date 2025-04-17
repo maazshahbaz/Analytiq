@@ -1,6 +1,40 @@
-#gitignore
-my_database.db
-chroma_db/
+# — Virtual environments —
+AnalytqiVenv/
+.venv/
+env/
+
+# — Python bytecode/cache —
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+
+# — Local databases & persistence —
+*.db
+chroma_db/
+# make sure this matches your filename exactly:
+sql_conversations.json
+
+# — Streamlit secrets —
 .streamlit/secrets.toml
+
+# — Environment vars, logs, coverage —
+.env
+*.log
+.coverage
+htmlcov/
+
+# — Packaging/build artifacts —
+build/
+dist/
+*.egg-info/
+pip-wheel-metadata/
+
+# — IDE/editor folders —
+.vscode/
+.idea/
+*.sublime-*
+*.code-workspace
+
+# — macOS/Windows OS artifacts —
+.DS_Store
+Thumbs.db
