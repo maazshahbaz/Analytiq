@@ -1,3 +1,4 @@
+#vector_store.py
 import os
 from chromadb.config import Settings                # ← NEW
 from langchain_community.embeddings import OpenAIEmbeddings
