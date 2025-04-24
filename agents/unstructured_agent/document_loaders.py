@@ -1,10 +1,12 @@
-#document_loaders.py
+# agents/unstructured_agent/document_loaders.py
 import os, re
 import pandas as pd
 from io import BytesIO
 from PyPDF2 import PdfReader
 from langchain.docstore.document import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_community.document_loaders import UnstructuredExcelLoader
+from agents.unstructured_agent.table_loaders import dataframe_to_docs
 from langchain_community.document_loaders import UnstructuredWordDocumentLoader
 
 # ------------------------------------------------------------------
@@ -71,6 +73,18 @@ def load_docx(file_obj, filename):
 
 def load_excel(file_obj, filename):
     base_meta = parse_filename_for_metadata(filename)
+    # ▶  First try high‑fidelity loader that preserves cell structure
+    try:
+        loader = UnstructuredExcelLoader(file_obj, mode="elements")
+        docs = loader.load()
+        # Enrich metadata uniformly
+        for d in docs:
+            d.metadata.update({"source": filename, **base_meta})
+        return docs
+    except Exception:
+        pass  # fall back to pandas if python‑docx/xlrd etc. fail
+
+    # ▶  Fallback – pandas per‑row JSON docs
     try:
         dfs = pd.read_excel(file_obj, sheet_name=None)
     except Exception:
@@ -80,23 +94,13 @@ def load_excel(file_obj, filename):
     for sheet, df in dfs.items():
         if df.empty:
             continue
-
-        # finest‑grain: one doc per row
         docs.extend(
-            df_to_row_docs(df, filename, level="row", sheet_name=sheet, **base_meta)
-        )
-
-        # section‑level summary
-        summary = f"Sheet {sheet} – {len(df)} rows. Columns: {', '.join(df.columns)}."
-        docs.append(
-            Document(
-                page_content=summary,
-                metadata={
-                    "source": filename,
-                    "sheet_name": sheet,
-                    "level": "section",
-                    **base_meta,
-                },
+            dataframe_to_docs(
+                df,
+                filename,
+                sheet_name=sheet,
+                level="row",
+                **base_meta,
             )
         )
     return docs
@@ -108,12 +112,12 @@ def load_csv(file_obj, filename):
         df = pd.read_csv(file_obj)
     except Exception:
         return []
-    return df_to_row_docs(df, filename, level="row", **base_meta)
+    return dataframe_to_docs(df, filename, level="row", **base_meta)
 
 
 # ------------------------------------------------------------------
 # One splitter shared by all formats
 # ------------------------------------------------------------------
 text_splitter = RecursiveCharacterTextSplitter(
-    chunk_size=1000, chunk_overlap=200, separators=["\n\n", "\n", " "]
+    chunk_size=3000, chunk_overlap=200, separators=["\n\n", "\n", " "]
 )

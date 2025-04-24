@@ -1,4 +1,4 @@
-# pandas_tools.py
+# agent/pandas_agent/pandas_tools.py
 
 from typing import List, Optional
 from pydantic import BaseModel, Field, root_validator
@@ -37,7 +37,7 @@ def make_describe_tool(files_dict: dict):
         target_sheet = sheet or sheets[0]
 
         df = files_dict[file][target_sheet]
-        return df.describe(include="all", datetime_is_numeric=True).to_markdown()
+        return df.describe(include="all").to_markdown()
 
     return StructuredTool(
         name="describe_df",

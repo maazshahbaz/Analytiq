@@ -1,9 +1,9 @@
-#vector_store.py
+# vector_store.py
 import os
 from chromadb.config import Settings                # ← NEW
 from langchain_community.embeddings import OpenAIEmbeddings
 from langchain_community.vectorstores import Chroma
-from config import PERSIST_DIRECTORY, COLLECTION_NAME
+from config.settings import PERSIST_DIRECTORY, COLLECTION_NAME
 
 
 def get_vector_store():

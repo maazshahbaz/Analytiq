@@ -1,11 +1,12 @@
-# sql_agent_with_memory.py
+# agents/database_agent/agent.py
+import streamlit as st
 from langchain_community.utilities.sql_database import SQLDatabase
 from langchain_openai import ChatOpenAI
 from langchain.agents import create_sql_agent, AgentType
 from langchain.memory import ConversationBufferMemory
-from sql_tools import get_sql_toolkit
-import streamlit as st
-import statistics
+
+from config.settings import OPENAI_API_KEY
+from .sql_tools import get_sql_toolkit
 
 # ---------------------------------------------------------------------
 # Dialect‑specific cheat‑sheet

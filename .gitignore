@@ -37,3 +37,5 @@ pip-wheel-metadata/
 # — macOS/Windows OS artifacts —
 .DS_Store
 Thumbs.db
+
+.env
