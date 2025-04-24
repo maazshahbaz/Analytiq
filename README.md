@@ -1,64 +1,96 @@
-# ✨ Analytiq – Unlock Insights from Unstructured Data
+z# 🌟 Analytiq – Unlock Insights from Institutional Data
 
-Analytiq is an AI-powered platform built for Institutional Research (IR) departments to transform how they work with data. It allows teams to effortlessly upload thousands of unstructured and semi-structured files—including PDFs, spreadsheets, and reports—and turn them into a powerful, searchable knowledge base.
-
-With natural language querying, users can talk to their documents, extract precise information, identify trends, and generate deep analysis without the need for manual digging. Whether you're working on accreditation reports, enrollment trends, or institutional performance metrics, Analytiq helps you get the answers faster.
-
-Once insights are generated, results can be downloaded in multiple formats such as CSV, Excel, or PDF—streamlining your workflow and supporting data-driven decision-making.
+**Analytiq** is an AI-powered platform designed for Institutional Research (IR) teams to streamline analysis of both unstructured and structured data. With Analytiq, you can:
+- Upload PDFs, Word docs, spreadsheets (CSV, Excel), and more  
+- Convert documents into a searchable vector store  
+- Run natural language queries against your data  
+- Explore SQL databases with a conversational agent  
+- Perform in-depth DataFrame analysis via a pandas-powered agent  
+- View, download, or export insights in CSV, Excel, or PDF  
 
 ---
 
-## 🚀 Features
-
-- 🔍 Natural language querying for IR datasets
-- 📂 Upload and process thousands of PDFs, Excel files, and reports
-- 🧠 AI-powered search and analytics
-- 📊 Export insights in CSV, Excel, or PDF
-- ⚡ Fast, user-friendly, and designed for research teams
+## 🚀 Key Features
+- **Document Agent**: Chat with your uploaded documents; retrieves and cites source files  
+- **SQL Explorer**: Connect to SQLite (or other databases) and ask questions via SQL or plain English  
+- **Pandas Agent**: Upload CSV/Excel and run advanced analyses with memory support  
+- **Modular Architecture**: Separate `agents/`, `config/`, `scripts/`, and `utils/` folders for scalability  
+- **Streamlit UI**: One unified dashboard (`main.py`) with three tabs for Docs, SQL, and Pandas  
 
 ---
 
 ## 🛠️ Getting Started
 
 ### Prerequisites
-
-- Python 3.8+
-- Virtual environment (`venv`) recommended
+- Python 3.8 or later  
+- Git  
 
 ### Installation
-
-```
+```bash
 # Clone the repository
 git clone https://github.com/maazshahbaz/Analytiq.git
 cd Analytiq
 
-# Create and activate a virtual environment
+# Set up a virtual environment
 python3 -m venv .venv
 source .venv/bin/activate
 
 # Install dependencies
 pip install -r requirements.txt
+```
 
-🧪 Usage
-Upload your files through the interface
-Ask questions in plain English
+### Environment Variables
+Create a `.env` file in the project root with:
+```
+OPENAI_API_KEY=<your_openai_key>
+COHERE_API_KEY=<your_cohere_key>  # if using reranking
+```
 
-View and export results
+### Run the App
+```bash
+streamlit run main.py
+```
 
-📁 Project Structure
+Then open the URL shown in your browser. You'll see three tabs:
+- **Docs & Chat** – Upload documents to populate the vector store, then chat
+- **SQL Explorer** – Connect/load a SQLite DB and converse via SQL
+- **Pandas Agent** – Upload tabular files and perform analysis
+
+## 🔍 Scripts for Testing
+We include smoke-test scripts under `scripts/`:
+- `run_database_agent.py`: Verifies the SQL agent can list tables and run queries
+- `run_unstructured_agent.py`: Tests the HybridQAChain against sample queries
+- `run_pandas_agent.py`: Tests DataFrame agent with an in-memory dummy DataFrame
+- `eval_unstructured.py`: RAG evaluation harness using gold.jsonl
+
+Run any script via:
+```bash
+python -m scripts/run_database_agent
+```
+(Replace with the appropriate script name.)
+
+## 📁 Project Structure
+```
 Analytiq/
-├── main.py               # Entry point of the app
-├── chroma_db/            # Vector DB storage (ignored by Git)
-├── requirements.txt
-├── .gitignore
-└── README.md
-🤝 Contributing
-We welcome contributions! If you'd like to improve Analytiq, please fork the repo, create a branch, and submit a pull request. For major changes, open an issue first to discuss what you want to change.
+├── agents/
+│   ├── database_agent/      # SQL agent code & UI
+│   ├── pandas_agent/        # DataFrame agent code & UI
+│   └── unstructured_agent/  # Document loader, vector store, chain, UI
+├── config/                  # Global settings & .env loader
+├── data/                    # Persistent storage (vector DB, sample DB)
+├── scripts/                 # Smoke-test and evaluation scripts
+├── utils/                   # Shared helpers (session storage, prompts)
+├── main.py                  # Streamlit entrypoint with 3-tab UI
+├── requirements.txt         # Python dependencies
+└── README.md                # This file
+```
 
-📄 License
+## 🤝 Contributing
+Contributions are welcome! Please fork the repo, create a feature branch, and submit a pull request.
+For large changes, open an issue first to discuss.
+
+## 📄 License
 This project is licensed under the MIT License.
 
-👤 Author
+## 👤 Author
 maazshahbaz
-GitHub Profile
-```
