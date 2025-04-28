@@ -1,4 +1,4 @@
-z# 🌟 Analytiq – Unlock Insights from Institutional Data
+🌟 Analytiq – Unlock Insights from Institutional Data
 
 **Analytiq** is an AI-powered platform designed for Institutional Research (IR) teams to streamline analysis of both unstructured and structured data. With Analytiq, you can:
 - Upload PDFs, Word docs, spreadsheets (CSV, Excel), and more  
