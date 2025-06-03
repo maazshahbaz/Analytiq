@@ -15,7 +15,7 @@
 - **SQL Explorer**: Connect to SQLite (or other databases) and ask questions via SQL or plain English  
 - **Pandas Agent**: Upload CSV/Excel and run advanced analyses with memory support  
 - **Modular Architecture**: Separate `agents/`, `config/`, `scripts/`, and `utils/` folders for scalability  
-- **Streamlit UI**: One unified dashboard (`main.py`) with three tabs for Docs, SQL, and Pandas  
+- **FastAPI Backend**: REST endpoints for Docs, SQL, and Pandas
 
 ---
 
@@ -48,15 +48,10 @@ COHERE_API_KEY=<your_cohere_key>  # if using reranking
 
 ### Run the App
 ```bash
-streamlit run main.py
+uvicorn app:app --reload
 ```
 
-Then open the URL shown in your browser. You'll see three tabs:
-- **Docs & Chat** – Upload documents to populate the vector store, then chat
-- **SQL Explorer** – Connect/load a SQLite DB and converse via SQL
-- **Pandas Agent** – Upload tabular files and perform analysis
-
-## 🔍 Scripts for Testing
+Then open http://localhost:8000/docs to explore the API.
 We include smoke-test scripts under `scripts/`:
 - `run_database_agent.py`: Verifies the SQL agent can list tables and run queries
 - `run_unstructured_agent.py`: Tests the HybridQAChain against sample queries
@@ -80,7 +75,7 @@ Analytiq/
 ├── data/                    # Persistent storage (vector DB, sample DB)
 ├── scripts/                 # Smoke-test and evaluation scripts
 ├── utils/                   # Shared helpers (session storage, prompts)
-├── main.py                  # Streamlit entrypoint with 3-tab UI
+├── app.py                  # FastAPI entrypoint
 ├── requirements.txt         # Python dependencies
 └── README.md                # This file
 ```
